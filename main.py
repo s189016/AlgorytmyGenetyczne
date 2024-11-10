@@ -1,21 +1,57 @@
 import random
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from matplotlib.animation import PillowWriter
 
 # Parametry
-N = 10  # liczba wierszy
-M = 10  # liczba kolumn
+N = 50  # liczba wierszy
+M = 50  # liczba kolumn
 START = (0, 0)  # Punkt startowy
-GOAL = (9, 9)  # Punkt docelowy
-POPULATION_SIZE = 50  # Rozmiar populacji
-GENE_LENGTH = 20  # Długość sekwencji komend (genomu)
+GOAL = (49, 49)  # Punkt docelowy
+POPULATION_SIZE = 100  # Rozmiar populacji
+MAX_GENE_LENTH = 300  # Długość sekwencji komend (genomu)
 MUTATION_RATE = 0.1  # Szansa mutacji
-GENERATIONS = 100  # Liczba generacji
+GENERATIONS = 20000  # Liczba generacji
+LEN_RATE = 0.01
 
 # Mapa - 0 to wolne miejsce, 1 to przeszkoda
 mapa = np.zeros((N, M))
-mapa[3, 3:7] = 1
-mapa[6, 2:8] = 1
+
+# Generowanie losowych przeszkód
+num_obstacles = 50  # Liczba przeszkód
+
+def create_obstacle(num_obstacles, mapa):
+    for _ in range(int(num_obstacles * 0.4)):
+        x = random.randint(0, N-1)
+        y = random.randint(0, M-1)
+        while (x < 4 and y < 4) or (x > N-4 and y > M-4):
+            x = random.randint(0, N-1)
+            y = random.randint(0, M-1)
+        mapa[x, y:y+2] = 1
+
+        x = random.randint(0, N-1)
+        y = random.randint(0, M-1)
+        while (x < 4 and y < 4) or (x > N-4 and y > M-4):
+            x = random.randint(0, N-1)
+            y = random.randint(0, M-1)
+        mapa[x:x+2, y] = 1
+    
+    for _ in range(int(num_obstacles * 0.1)):
+        x = random.randint(10, N-5)
+        y = random.randint(10, M-5)
+        mapa[x:x+6, y:y+2] = 1
+
+        x = random.randint(10, N-5)
+        y = random.randint(10, M-5)
+        mapa[x:x+2, y:y+6] = 1
+    
+while(True):
+    create_obstacle(num_obstacles, mapa)
+    plt.imshow(mapa, cmap='gray_r')
+    plt.show()
+    if input("Czy przeszkody są OK? (t/n): ") == 't':
+        break
 
 # Możliwe ruchy
 MOVES = ["straight", "right", "left", "u-turn"]
@@ -23,9 +59,9 @@ MOVES = ["straight", "right", "left", "u-turn"]
 
 # Funkcje pomocnicze
 def random_genome():
-    """Generuje losowy genom (trasę)."""
-    return [random.choice(MOVES) for _ in range(GENE_LENGTH)]
-
+    """Generuje losowy genom o zmiennej długości."""
+    length = random.randint(int(np.sqrt(N*M)), MAX_GENE_LENTH)  # Możesz ustawić minimalną i maksymalną długość
+    return [random.choice(MOVES) for _ in range(length)]
 
 def move_robot(position, direction):
     """Oblicza nową pozycję po wykonaniu ruchu."""
@@ -40,41 +76,70 @@ def move_robot(position, direction):
         x -= 1
     return max(0, min(N - 1, x)), max(0, min(M - 1, y))  # Ograniczenie do granic mapy
 
-
 def evaluate_fitness(genome):
-    """Ocenia jakość (fitness) genomu jako odległość od celu."""
+    """
+    Ocenia jakość (fitness) genomu jako kombinację:
+    1. Odległości od celu.
+    2. Długości drogi (genomu).
+    """
     position = START
+    penalty = 0  # Kara za kolizję
     for command in genome:
         position = move_robot(position, command)
         if mapa[position] == 1:  # Zderzenie z przeszkodą
-            return float('inf')
-    return np.linalg.norm(np.array(position) - np.array(GOAL))  # Odległość od celu
+            penalty += 500  # Kara za każdą kolizję
+            break  # Kończymy trasę przy kolizji
 
+    # Odległość euklidesowa od celu
+    distance_to_goal = np.linalg.norm(np.array(position) - np.array(GOAL))
+
+    # Uwzględnienie długości genomu
+    genome_length_penalty = len(genome) * LEN_RATE  # Waga kary za długość genomu
+
+    # Całkowity fitness
+    return distance_to_goal + genome_length_penalty + penalty
 
 def select_parents(population):
     """Selekcja losowa osobników z preferencją lepszych rozwiązań."""
     population.sort(key=lambda x: x[1])
     return population[:2]  # Wybiera dwa najlepsze osobniki
 
-
 def crossover(parent1, parent2):
-    """Krzyżowanie dwóch rodziców."""
-    idx = random.randint(1, GENE_LENGTH - 1)
-    child1 = parent1[:idx] + parent2[idx:]
-    child2 = parent2[:idx] + parent1[idx:]
+    """Krzyżowanie dwóch rodziców o różnych długościach."""
+    len1, len2 = len(parent1), len(parent2)
+    idx1 = random.randint(0, len1 - 1)
+    idx2 = random.randint(0, len2 - 1)
+    
+    child1 = parent1[:idx1] + parent2[idx2:]
+    child2 = parent2[:idx2] + parent1[idx1:]
+    
     return child1, child2
 
-
 def mutate(genome):
-    """Mutacja genomu."""
-    for i in range(GENE_LENGTH):
+    """Mutacja genomu o zmiennej długości."""
+    new_genome = []
+    for gene in genome:
         if random.random() < MUTATION_RATE:
-            genome[i] = random.choice(MOVES)
-    return genome
+            if random.random() < 0.5:  # Zmieniamy gen
+                new_genome.append(random.choice(MOVES))
+            # W przeciwnym wypadku pomijamy gen (czyli usuwamy)
+        else:
+            new_genome.append(gene)
+    
+    # Możliwość dodania nowego genu
+    if random.random() < MUTATION_RATE:
+        new_genome.append(random.choice(MOVES))
+    return new_genome
 
 
 # Inicjalizacja populacji
 population = [(random_genome(), float('inf')) for _ in range(POPULATION_SIZE)]
+
+progress = []
+prog_gen = []
+best_gen_video = []
+last_best_genome = float('inf')
+last_best_fitness = float('inf')
 
 # Algorytm genetyczny
 for generation in range(GENERATIONS):
@@ -83,9 +148,14 @@ for generation in range(GENERATIONS):
 
     # Sprawdzanie najlepszego rozwiązania
     best_genome, best_fitness = min(population, key=lambda x: x[1])
-    if best_fitness == 0:  # Dotarcie do celu
-        print(f"Osiągnięto cel w generacji {generation}")
-        break
+
+    if best_fitness < last_best_fitness:
+        progress.append(best_fitness)
+        prog_gen.append(generation)
+        print(f"Nowe najlepsze rozwiązanie znalezione w generacji {generation}")
+        last_best_genome = best_genome
+        last_best_fitness = best_fitness
+        best_gen_video.append(best_genome)
 
     # Tworzenie nowej populacji
     new_population = []
@@ -104,34 +174,59 @@ for generation in range(GENERATIONS):
     population = new_population
 
 
-# Wizualizacja znalezionej trasy
-def plot_map_with_path(genome):
-    plt.figure(figsize=(6, 6))
-    plt.imshow(mapa, cmap='gray_r')
-    plt.plot(START[1], START[0], 'go', label="Start")  # Start
-    plt.plot(GOAL[1], GOAL[0], 'ro', label="Cel")  # Goal
+# Wyświetlenie mapy z trasą
+#print("Najlepsza trasa:", best_genome)
+print("Odległość od celu:", last_best_fitness)
 
-    # Śledzenie pozycji robota
+# Animation with Matplotlib
+fig, ax = plt.subplots(figsize=(10, 10))
+
+def update(frame):
+    """Update function for animation."""
+    ax.clear()
+    best_gen = best_gen_video[frame]
+    ax.imshow(mapa, cmap='gray_r')
+    ax.plot(START[1], START[0], 'go', label="Start")  # Start
+    ax.plot(GOAL[1], GOAL[0], 'ro', label="Goal")  # Goal
     position = START
     path_x, path_y = [position[1]], [position[0]]
-
-    for command in genome:
+    for command in best_gen:
         position = move_robot(position, command)
         path_x.append(position[1])
         path_y.append(position[0])
-        if mapa[position] == 1:  # Zderzenie z przeszkodą
+        if mapa[position] == 1:  # Collision with obstacle
             break
+    ax.plot(path_x, path_y, 'b-', label="Robot Path")  # Path
+    ax.legend()
+    ax.set_title("Map with Obstacles and Robot Path")
+    ax.set_xlabel("Columns")
+    ax.set_ylabel("Rows")
+    ax.set_xticks(np.arange(0, M, 1))
+    ax.set_yticks(np.arange(0, N, 1))
+    ax.grid()
 
-    plt.plot(path_x, path_y, 'b-', label="Trasa robota")  # Rysowanie trasy
-    plt.legend()
-    plt.title("Mapa z przeszkodami i trasą robota")
-    plt.xlabel("Kolumny")
-    plt.ylabel("Wiersze")
-    plt.grid()
-    plt.show()
+# Create the animation
+ani = FuncAnimation(
+    fig, update, frames=len(best_gen_video),
+    interval=300, repeat=False  # 500ms interval between frames
+)
 
+# Show the animation
+plt.show()
 
-# Wyświetlenie mapy z trasą
-print("Najlepsza trasa:", best_genome)
-print("Odległość od celu:", best_fitness)
-plot_map_with_path(best_genome)
+# Save the animation using Pillow
+
+writer = PillowWriter(fps=2)
+ani.save('robot_path.gif', writer=writer)  # Save as gif file
+
+progress = np.array(progress)
+prog_gen = np.array(prog_gen)
+prog_min = np.min(progress)
+progress = int(np.sqrt(N*M)) * LEN_RATE - progress
+plt.plot(prog_gen, progress)
+plt.plot(prog_gen, np.zeros(len(progress)), 'r--')
+plt.title("Postęp algorytmu genetycznego")
+plt.xlabel("Generacja")
+plt.ylabel("Odległość od celu")
+plt.savefig('progress.png')
+plt.show()
