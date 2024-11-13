@@ -230,3 +230,33 @@ plt.xlabel("Generacja")
 plt.ylabel("Odległość od celu")
 plt.savefig('progress.png')
 plt.show()
+
+
+# Tworzenie mapowania ruchów na wartości liczbowe
+move_to_number = {
+    "straight": 0,
+    "right": 1,
+    "left": -1,
+    "u-turn": 2
+}
+
+# Konwertowanie genomów na liczby dla x1 i x2
+x1 = np.array([move_to_number.get(genome[0], 0) for genome in best_gen_video])  # Pierwszy gen lub 0
+x2 = np.array([move_to_number.get(genome[1], 0) for genome in best_gen_video])  # Drugi gen lub 0
+
+# Oś generacji
+pokolenia = prog_gen
+
+# Rysowanie wykresu 3D
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.plot(x1, x2, pokolenia, label='Najlepsze rozwiązanie w każdej generacji', color='k')
+ax.set_xlabel('$x_1$')
+ax.set_ylabel('$x_2$')
+ax.set_zlabel('Pokolenie')
+ax.legend()
+plt.title("Ewolucja parametrów w algorytmie genetycznym")
+
+# Zapisanie wykresu jako plik parametry.png
+plt.savefig('parametry.png')
+plt.show()
