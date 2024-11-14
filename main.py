@@ -12,7 +12,7 @@ GOAL = (49, 49)  # Punkt docelowy
 POPULATION_SIZE = 100  # Rozmiar populacji
 MAX_GENE_LENTH = 300  # Długość sekwencji komend (genomu)
 MUTATION_RATE = 0.1  # Szansa mutacji
-GENERATIONS = 20000  # Liczba generacji
+GENERATIONS = 5000  # Liczba generacji
 LEN_RATE = 0.01
 
 # Mapa - 0 to wolne miejsce, 1 to przeszkoda
